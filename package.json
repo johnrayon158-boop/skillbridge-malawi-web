@@ -12,6 +12,7 @@
     "db:seed": "psql \"$DATABASE_URL\" -f seeds/001_seed_core.sql && psql \"$DATABASE_URL\" -f seeds/002_skills_careers.sql && psql \"$DATABASE_URL\" -f seeds/003_programs_careers.sql && psql \"$DATABASE_URL\" -f seeds/004_demo_users.sql"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.116.0",
     "@vitejs/plugin-react": "latest",
     "bcrypt": "^5.1.0",
     "body-parser": "^2.3.0",

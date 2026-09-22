@@ -61,7 +61,8 @@ function App(){
   const [theme,setTheme]=useState('light');
 
   useEffect(()=>{
-    const initial = window.location.hash.replace('#','');
+    const pathRoutes = {'/student/dashboard':'dashboard','/graduate/dashboard':'dashboard','/employer/dashboard':'employer','/admin/dashboard':'admin'};
+    const initial = window.location.hash.replace('#','') || pathRoutes[window.location.pathname];
     if(initial) setPage(initial);
     const onHashChange = ()=>{
       const h = window.location.hash.replace('#','');
@@ -76,7 +77,7 @@ function App(){
 
   const notify=(m)=>{setToast(m);setTimeout(()=>setToast(''),2200)};
   const go=(p)=>setPage(p);
-  const {user, logout} = useAuth();
+  const {user} = useAuth();
   useEffect(()=>{ setLogged(!!user); },[user]);
 
   const switchRole=(r)=>{ /* role switching handled by auth role */ notify(`Switch role is available via account management`)};
@@ -86,7 +87,7 @@ function App(){
     {page==='about'&&<About/>}
     {page==='how'&&<HowItWorks/>}
     {page==='login'&&<Login onLogin={(u)=>{ setLogged(true); const r = u?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('dashboard'); notify('Welcome back'); }} go={go}/>} 
-    {page==='signup'&&<Signup onSignup={(u)=>{ setLogged(true); const r = u?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('profile'); notify('Account created — complete your profile'); }} />}
+    {page==='signup'&&<Signup onSignup={(u,needsEmailConfirmation)=>{ if(needsEmailConfirmation){ setLogged(false); go('login'); notify('Account created. Check your email to confirm it before logging in.'); return; } setLogged(true); const r = u?.role || u?.user_metadata?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('profile'); notify('Account created — complete your profile'); }} />}
     {page==='dashboard'&&<StudentDashboard profile={profile} go={go}/>} 
     {page==='profile'&&<Profile profile={profile} setProfile={setProfile} notify={notify}/>} 
     {page==='myprofile'&&<MyProfile/>}
@@ -131,11 +132,12 @@ function App(){
       {page==='recommended-resources'&&<RecommendedResources/>}
   </>;
 
-  const isPublic=['home','login','signup','about','how'].includes(page);
+  const isPublic=['home','login','signup','about','how','careers_dir','jobs'].includes(page) || page.startsWith('job-');
   const roleName = user?.role || null;
 
   const employerOnly = ['employer','company','post-job','manage-jobs','candidates','employer-apps','employer_profile'];
-  const allowedRolesForPage = isPublic ? null : (page==='admin' ? ['admin'] : (employerOnly.includes(page) ? ['employer'] : ['student','graduate','employer']));
+  const studentOnly = ['dashboard','profile','myprofile','applications','careers','skills','assessments','assessment','skill-gap','gap','learning','learning-resources','recommended-resources','portfolio','my-portfolio','notifications','settings'];
+  const allowedRolesForPage = isPublic ? null : (page==='admin' ? ['admin'] : (employerOnly.includes(page) ? ['employer'] : (studentOnly.includes(page) ? ['student','graduate'] : ['student','graduate','employer'])));
 
   const guardedContent = isPublic ? pageContent : <Protected allowedRoles={allowedRolesForPage}>{pageContent}</Protected>;
 
@@ -151,17 +153,10 @@ function CareerMini({c}){return <div className="career-mini"><div className={'mi
 function About(){return <div className="public-page"><Badge tone="soft">About SkillBridge Malawi</Badge><h1>Bridging Skills, Careers and Employment.</h1><p>SkillBridge Malawi connects students and graduates to career guidance, skills assessment, learning resources, professional portfolios and employment opportunities through one platform.</p><div className="about-cards"><div><b>Discover</b><span>Personalized career recommendations.</span></div><div><b>Assess</b><span>Evidence-based skills assessment.</span></div><div><b>Improve</b><span>Learning recommendations for skill gaps.</span></div><div><b>Match</b><span>Explainable job and candidate matching.</span></div></div></div>}
 function HowItWorks(){return <div className="public-page"><Badge tone="soft">How it works</Badge><h1>From learning to opportunity.</h1><div className="steps">{[['01','Discover','Complete your profile and receive career recommendations.'],['02','Assess','Take skill assessments and understand your current competency.'],['03','Improve','See your skill gaps and receive relevant learning resources.'],['04','Showcase','Build a portfolio with projects, certificates and evidence.'],['05','Match','Find jobs and internships matched to your profile.']].map(s=><div className="step" key={s[0]}><b>{s[0]}</b><h3>{s[1]}</h3><p>{s[2]}</p></div>)}</div></div>}
 function Login({onLogin,go}){
-  const { login } = useAuth();
+  const { login, resetPassword } = useAuth();
   const [email,setEmail] = useState('');
   const [password,setPassword] = useState('');
   const [error,setError] = useState(null);
-
-  const demoAccounts = [
-    {label:'Demo Student',email:'student@skillbridge.mw',password:'Student@123'},
-    {label:'Demo Graduate',email:'graduate@skillbridge.mw',password:'Graduate@123'},
-    {label:'Demo Employer',email:'employer@skillbridge.mw',password:'Employer@123'},
-    {label:'Demo Admin',email:'admin@skillbridge.mw',password:'Admin@123'}
-  ];
 
   const handleSubmit = async (e)=>{
     e.preventDefault(); setError(null);
@@ -169,7 +164,11 @@ function Login({onLogin,go}){
     if(r.ok){ onLogin(r.user); } else setError(r.error || 'Login failed');
   };
 
-  const fillDemo = (acct)=>{ setEmail(acct.email); setPassword(acct.password); };
+  const handleReset = async ()=>{
+    if(!email){ setError('Enter your email address first'); return; }
+    const result = await resetPassword(email);
+    setError(result.ok ? 'Check your email for a password reset link.' : result.error);
+  };
 
   return <div className="auth-page"><div className="auth-brand"><Logo/><div className="auth-slogan"><h2>Your skills. Our platform.<br/><span>A brighter future.</span></h2><div className="orbit">⌃</div></div></div>
     <form className="auth-card" onSubmit={handleSubmit}>
@@ -178,21 +177,10 @@ function Login({onLogin,go}){
       {error&&<div className="error">{error}</div>}
       <label>Email address<input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="Enter your email" required/></label>
       <label>Password<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="Enter your password" required/></label>
-      <div className="row-between"><label className="check"><input type="checkbox"/> Remember me</label><a>Forgot password?</a></div>
+      <div className="row-between"><label className="check"><input type="checkbox"/> Remember me</label><a onClick={handleReset}>Forgot password?</a></div>
       <Button type="submit">Login</Button>
-      <div className="divider">or continue with</div>
-      <div className="socials"><button type="button">G Google</button><button type="button">▣ Microsoft</button></div>
       <small>Don't have an account? <a onClick={()=>go('signup')}>Create one</a></small>
     </form>
-
-    <aside className="demo-accounts">
-      <div className="panel"><h3>Demo Accounts</h3>
-        {demoAccounts.map(d=>
-          <div key={d.email} className="demo-row"><div><b>{d.label}</b><small>{d.email}</small></div><div><button onClick={()=>fillDemo(d)}>Use Demo Account</button></div></div>
-        )}
-        <p className="muted">Click a demo account to pre-fill the login form; you still need to click Login.</p>
-      </div>
-    </aside>
   </div>;
 }
 function Signup({onSignup}){
@@ -202,6 +190,11 @@ function Signup({onSignup}){
   const [password,setPassword] = useState('');
   const [confirm,setConfirm] = useState('');
   const [accountType,setAccountType] = useState('student');
+  const [institution,setInstitution] = useState('');
+  const [programme,setProgramme] = useState('');
+  const [careerInterests,setCareerInterests] = useState('');
+  const [companyName,setCompanyName] = useState('');
+  const [companyType,setCompanyType] = useState('');
   const [accept,setAccept] = useState(false);
   const [error,setError] = useState(null);
 
@@ -209,8 +202,8 @@ function Signup({onSignup}){
     e.preventDefault();
     setError(null);
     if(password !== confirm){ setError('Passwords do not match'); return; }
-    const r = await register({ fullName, email, password, accountType, acceptTerms: accept });
-    if(r.ok){ onSignup && onSignup(r.user); } else setError(r.error || 'Registration failed');
+    const r = await register({ fullName, email, password, accountType, acceptTerms: accept, institution, programme, careerInterests: careerInterests.split(',').map(item=>item.trim()).filter(Boolean), companyName, companyType });
+    if(r.ok){ onSignup && onSignup(r.user, r.needsEmailConfirmation); } else setError(r.error || 'Registration failed');
   };
 
   return (
@@ -233,6 +226,14 @@ function Signup({onSignup}){
         <label>Email address<input value={email} onChange={e=>setEmail(e.target.value)} required type="email" placeholder="Enter your email"/></label>
         <label>Password<input value={password} onChange={e=>setPassword(e.target.value)} required type="password" placeholder="Create a password"/></label>
         <label>Confirm password<input value={confirm} onChange={e=>setConfirm(e.target.value)} required type="password" placeholder="Confirm password"/></label>
+        {accountType === 'employer' ? <>
+          <label>Company name<input value={companyName} onChange={e=>setCompanyName(e.target.value)} required placeholder="Enter your company name"/></label>
+          <label>Company type / industry<input value={companyType} onChange={e=>setCompanyType(e.target.value)} required placeholder="e.g. Technology & ICT"/></label>
+        </> : <>
+          <label>Institution<input value={institution} onChange={e=>setInstitution(e.target.value)} placeholder="Enter your institution"/></label>
+          <label>Programme<input value={programme} onChange={e=>setProgramme(e.target.value)} placeholder="e.g. BSc Computer Science"/></label>
+          <label>Career interests<input value={careerInterests} onChange={e=>setCareerInterests(e.target.value)} placeholder="e.g. Software, Data, Design"/></label>
+        </>}
         <label className="check"><input type="checkbox" checked={accept} onChange={e=>setAccept(e.target.checked)}/> I accept the terms</label>
         <Button type="submit">Next →</Button>
         <small>Already have an account? <a onClick={()=>{ window.location.hash='login'; }}>Log in</a></small>

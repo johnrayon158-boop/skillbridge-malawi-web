@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
+import { supabase } from '../lib/supabaseClient';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import PageHeader from '../components/PageHeader';
@@ -7,7 +8,7 @@ import PageHeader from '../components/PageHeader';
 function SectionHead({title,action}){return <div className="section-head"><h3>{title}</h3>{action&&<div>{action}</div>}</div>}
 
 export default function MyProfile(){
-  const { token } = useAuth();
+  const { token, user, profile: authProfile } = useAuth();
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState(null);
   const [profile,setProfile]=useState(null);
@@ -15,25 +16,22 @@ export default function MyProfile(){
   const [personal,setPersonal]=useState({full_name:'',bio:'',location:'',phone:'',photo_url:''});
 
   const fetchProfile = async ()=>{
-    setLoading(true); setError(null);
-    try{
-      const res = await fetch('/api/profile', { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if(!res.ok) throw new Error(data.error||'Failed to load');
-      setProfile(data);
-      setPersonal({ full_name: data.profile?.full_name||'', bio: data.profile?.bio||'', location: data.profile?.location||'', phone: data.profile?.phone||'', photo_url: data.profile?.photo_url||'' });
-    }catch(err){ setError(err.message); }
-    setLoading(false);
+    if(!authProfile) return;
+    setLoading(false); setError(null);
+    setProfile({ profile: authProfile, user, education: [], skills: [], experiences: [], certificates: [] });
+    setPersonal({ full_name: authProfile.full_name||'', bio: authProfile.bio||'', location: authProfile.location||'', phone: authProfile.phone||'', photo_url: authProfile.profile_photo_url||'' });
   };
 
-  useEffect(()=>{ if(token) fetchProfile(); },[token]);
+  useEffect(()=>{ if(token) fetchProfile(); },[token, authProfile, user]);
 
   const savePersonal = async ()=>{
     setError(null);
     try{
-      const res = await fetch('/api/profile', { method:'PUT', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(personal) });
-      const data = await res.json(); if(!res.ok) throw new Error(data.error||'Save failed');
-      setEditing(false); fetchProfile();
+      const { error: updateError } = await supabase.from('profiles').update({ full_name:personal.full_name, bio:personal.bio, location:personal.location, phone:personal.phone, profile_photo_url:personal.photo_url }).eq('user_id', user.id);
+      if(updateError) throw new Error('Unable to save your profile. Please try again.');
+      const updatedProfile = { ...authProfile, full_name:personal.full_name, bio:personal.bio, location:personal.location, phone:personal.phone, profile_photo_url:personal.photo_url };
+      setProfile(current => ({ ...current, profile: updatedProfile }));
+      setEditing(false);
     }catch(err){ setError(err.message); }
   };
 
