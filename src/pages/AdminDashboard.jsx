@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../lib/supabaseClient';
 import { readableSupabaseError } from '../lib/supabaseData';
 
 export default function AdminDashboard(){
+  const { logout } = useAuth();
   const [stats,setStats]=useState(null);
   const [users,setUsers]=useState([]);
   const [q,setQ]=useState('');
@@ -28,7 +30,8 @@ export default function AdminDashboard(){
     const { error }=await supabase.from('profiles').update({status:activate?'active':'inactive'}).eq('id',id); if(error) alert(readableSupabaseError(error,'Unable to update user status.')); else fetchUsers();
   };
 
-  return <div className="admin-page"><PageHeader eyebrow="Administrator" title="Admin dashboard" description="Manage users, content and moderation." />
+  const signOut = async ()=>{ await logout(); window.location.hash='login'; };
+  return <div className="admin-page"><PageHeader eyebrow="Administrator" title="Admin dashboard" description="Manage users, content and moderation." action={<Button variant="outline" onClick={signOut}>↪ Log out</Button>} />
     <div className="admin-grid">{error&&<div className="panel error">{error}</div>}<div className="panel"><h3>Platform summary</h3>{stats? <div className="stats-grid">{Object.keys(stats).map(k=> <div key={k}><b>{stats[k]}</b><span>{k.replace(/_/g,' ')}</span></div>)}</div> : <p>Loading...</p>}</div>
     <div className="panel"><h3>User management</h3><div className="user-controls"><input placeholder="Search users" value={q} onChange={e=>setQ(e.target.value)}/><select value={roleFilter} onChange={e=>setRoleFilter(e.target.value)}><option value="">All roles</option><option value="student">Student</option><option value="graduate">Graduate</option><option value="employer">Employer</option></select><Button onClick={fetchUsers}>Search</Button></div>
     <div className="user-list">{users.map(u=> <div key={u.id} className="user-row"><div><b>{u.email}</b><small>{u.role}</small></div><div><small>{u.status}</small><Button variant="outline" onClick={()=>toggleActive(u.id, u.status!=='active')}>{u.status==='active'?'Deactivate':'Activate'}</Button></div></div>)}</div></div>
