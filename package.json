@@ -3,7 +3,8 @@
   "private": true,
   "version": "1.0.0",
   "scripts": {
-    "dev": "concurrently -k \"npm run dev:server\" \"vite --host 0.0.0.0\"",
+    "dev": "vite --host 0.0.0.0",
+    "dev:full": "concurrently -k \"npm run dev:server\" \"vite --host 0.0.0.0\"",
     "build": "vite build",
     "preview": "vite preview",
     "start:server": "node server/index.js",
