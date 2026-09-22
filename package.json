@@ -1,0 +1,30 @@
+{
+  "name": "skillbridge-malawi",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "concurrently -k \"npm run dev:server\" \"vite --host 0.0.0.0\"",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start:server": "node server/index.js",
+    "dev:server": "node server/index.js",
+    "db:migrate": "psql \"$DATABASE_URL\" -f migrations/001_create_schema.sql && psql \"$DATABASE_URL\" -f migrations/002_career_programs.sql",
+    "db:seed": "psql \"$DATABASE_URL\" -f seeds/001_seed_core.sql && psql \"$DATABASE_URL\" -f seeds/002_skills_careers.sql && psql \"$DATABASE_URL\" -f seeds/003_programs_careers.sql && psql \"$DATABASE_URL\" -f seeds/004_demo_users.sql"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "bcrypt": "^5.1.0",
+    "body-parser": "^2.3.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "pg": "^8.0.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "vite": "latest"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
