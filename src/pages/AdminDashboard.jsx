@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../components/PageHeader';
 import Button from '../components/Button';
+import { supabase } from '../lib/supabaseClient';
+import { readableSupabaseError } from '../lib/supabaseData';
 
 export default function AdminDashboard(){
   const [stats,setStats]=useState(null);
@@ -9,21 +11,20 @@ export default function AdminDashboard(){
   const [roleFilter,setRoleFilter]=useState('');
 
   const fetchStats = async ()=>{
-    const r = await fetch('/api/admin/dashboard', { headers: { Authorization: `Bearer ${localStorage.getItem('sb_token')}` } });
-    if (r.ok){ setStats(await r.json()); }
+    const tables=['profiles','institutions','programmes','skills','careers','jobs','applications','assessments']; const values={};
+    for(const table of tables){ const { count, error }=await supabase.from(table).select('id',{count:'exact',head:true}); if(error) throw error; values[table]=count||0; }
+    setStats({total_users:values.profiles,students:await countRole('student'),graduates:await countRole('graduate'),employers:await countRole('employer'),institutions:values.institutions,programmes:values.programmes,skills:values.skills,careers:values.careers,jobs:values.jobs,applications:values.applications,assessments:values.assessments});
   };
+  const countRole = async role=>{ const { count, error }=await supabase.from('profiles').select('id',{count:'exact',head:true}).eq('role',role); if(error) throw error; return count||0; };
   const fetchUsers = async ()=>{
     const params = new URLSearchParams(); if(q) params.set('q',q); if(roleFilter) params.set('role',roleFilter);
-    const r = await fetch('/api/admin/users?'+params.toString(), { headers: { Authorization: `Bearer ${localStorage.getItem('sb_token')}` } });
-    if (r.ok) setUsers(await r.json());
+    let query=supabase.from('profiles').select('id,user_id,email,role,status,created_at').order('created_at',{ascending:false}).limit(200); if(q) query=query.or(`email.ilike.%${q}%,full_name.ilike.%${q}%`); if(roleFilter) query=query.eq('role',roleFilter); const { data,error }=await query; if(error) throw error; setUsers(data||[]);
   };
 
-  useEffect(()=>{ fetchStats(); fetchUsers(); },[]);
+  useEffect(()=>{ (async()=>{try{await fetchStats();await fetchUsers();}catch(error){console.error(error);}})(); },[]);
 
   const toggleActive = async (id,activate)=>{
-    const url = `/api/admin/users/${id}/${activate? 'activate':'deactivate'}`;
-    const r = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('sb_token')}` } });
-    if (r.ok) fetchUsers();
+    const { error }=await supabase.from('profiles').update({status:activate?'active':'inactive'}).eq('id',id); if(error) alert(readableSupabaseError(error,'Unable to update user status.')); else fetchUsers();
   };
 
   return <div className="admin-page"><PageHeader eyebrow="Administrator" title="Admin dashboard" description="Manage users, content and moderation." />

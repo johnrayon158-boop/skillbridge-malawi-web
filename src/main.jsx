@@ -22,6 +22,8 @@ import JobEditor from './pages/JobEditor';
 import EmployerJobs from './pages/EmployerJobs';
 import JobDetailPublic from './pages/JobDetailPublic';
 import AdminDashboard from './pages/AdminDashboard';
+import { fetchPublishedJobs, readableSupabaseError } from './lib/supabaseData';
+import { supabase } from './lib/supabaseClient';
 
 const careers = [
   {title:'Software Developer', category:'Technology & ICT', match:91, icon:'⌘', skills:['JavaScript','React','Git','APIs','SQL'], color:'blue'},
@@ -89,11 +91,10 @@ function App(){
     {page==='login'&&<Login onLogin={(u)=>{ setLogged(true); const r = u?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('dashboard'); notify('Welcome back'); }} go={go}/>} 
     {page==='signup'&&<Signup onSignup={(u,needsEmailConfirmation)=>{ if(needsEmailConfirmation){ setLogged(false); go('login'); notify('Account created. Check your email to confirm it before logging in.'); return; } setLogged(true); const r = u?.role || u?.user_metadata?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('profile'); notify('Account created — complete your profile'); }} />}
     {page==='dashboard'&&<StudentDashboard profile={profile} go={go}/>} 
-    {page==='profile'&&<Profile profile={profile} setProfile={setProfile} notify={notify}/>} 
-    {page==='myprofile'&&<MyProfile/>}
+    {page==='profile'&&<MyProfile/>}
     {page==='applications'&&<MyApplications/>}
     {page.startsWith('application-')&&<ApplicantDetail id={page.replace('application-','')}/>} 
-    {page==='careers'&&<CareerGuidance go={go}/>} 
+    {page==='careers'&&<Careers/>} 
     {page==='careers_dir'&&<Careers/>}
     {page.startsWith('career-')&&<CareerDetail id={page.replace('career-','')}/>} 
     {page==='skills'&&<Skills/>}
@@ -109,22 +110,19 @@ function App(){
     {page==='assessment-manager'&&<AssessmentManager/>}
     {page==='skill-gap'&&<SkillGap/>}
     {page==='career-guidance'&&<CareerGuidance/>}
-    {page==='assessment'&&<AssessmentPage assessment={assessment} setAssessment={setAssessment} notify={notify}/>} 
+    {page==='assessment'&&<Assessments/>} 
     {page==='my-portfolio'&&<MyPortfolio/>}
     {page==='project-new'&&<ProjectEditor/>}
     {page.startsWith('project-')&&page!=='projects'&&<ProjectEditor id={page.replace('project-','')}/>} 
     {page.startsWith('portfolio-')&&<PublicPortfolio id={page.replace('portfolio-','')}/>} 
-    {page==='gap'&&<SkillsGap go={go}/>} 
-    {page==='learning'&&<Learning notify={notify}/>} 
-    {page==='portfolio'&&<Portfolio notify={notify}/>} 
+    {page==='gap'&&<SkillGap/>} 
+    {page==='learning'&&<LearningResources/>} 
+    {page==='portfolio'&&<MyPortfolio/>} 
     {page==='jobs'&&<Jobs jobs={jobs} saved={saved} setSaved={setSaved} applications={applications} setApplications={setApplications} notify={notify}/>} 
-    {page==='applications'&&<Applications applications={applications}/>} 
     {page==='notifications'&&<Notifications/>}
     {page==='settings'&&<Settings theme={theme} setTheme={setTheme} notify={notify}/>} 
     {page==='employer'&&<EmployerDashboard go={go}/>} 
     {page==='company'&&<CompanyProfile notify={notify}/>} 
-    {page==='post-job'&&<PostJob notify={notify}/>} 
-    {page==='manage-jobs'&&<ManageJobs notify={notify}/>} 
     {page==='candidates'&&<Candidates/>} 
     {page==='employer-apps'&&<EmployerApplications notify={notify}/>} 
     {page==='admin'&&<AdminDashboard notify={notify}/>} 
@@ -136,7 +134,7 @@ function App(){
   const roleName = user?.role || null;
 
   const employerOnly = ['employer','company','post-job','manage-jobs','candidates','employer-apps','employer_profile'];
-  const studentOnly = ['dashboard','profile','myprofile','applications','careers','skills','assessments','assessment','skill-gap','gap','learning','learning-resources','recommended-resources','portfolio','my-portfolio','notifications','settings'];
+  const studentOnly = ['dashboard','profile','myprofile','applications','careers','skills','assessments','assessment','skill-gap','gap','learning','learning-resources','recommended-resources','portfolio','my-portfolio','notifications','settings','careers_dir'];
   const allowedRolesForPage = isPublic ? null : (page==='admin' ? ['admin'] : (employerOnly.includes(page) ? ['employer'] : (studentOnly.includes(page) ? ['student','graduate'] : ['student','graduate','employer'])));
 
   const guardedContent = isPublic ? pageContent : <Protected allowedRoles={allowedRolesForPage}>{pageContent}</Protected>;
@@ -257,7 +255,12 @@ function Learning({notify}){return <><PageHeader eyebrow="Learning resources" ti
 
 function Portfolio({notify}){const projects=[['SkillBridge Malawi','AI-powered career and employment platform','React · TypeScript · Supabase'],['Malawi Expense Tracker','Personal finance management web app','Next.js · PostgreSQL'],['DMI Student Portal','Academic information prototype','React · Tailwind CSS']];return <><PageHeader eyebrow="My portfolio" title="Showcase what you can do" description="Give employers evidence of your practical abilities." action={<Button onClick={()=>notify('Project form opened')}>＋ Add Project</Button>}/><div className="portfolio-head panel"><div className="avatar xl">BC</div><div><h2>Blessings Chirwa</h2><p>Computer Science · Lilongwe, Malawi</p><div className="chips"><span>JavaScript</span><span>React</span><span>UI Design</span><span>SQL</span></div></div><Badge tone="success">Public portfolio</Badge></div><div className="project-grid">{projects.map(p=><div className="project-card" key={p[0]}><div className="project-cover"><span>▦</span></div><div><Badge tone="soft">Project</Badge><h3>{p[0]}</h3><p>{p[1]}</p><small>{p[2]}</small><button onClick={()=>notify('Project details opened')}>View project →</button></div></div>)}</div></>}
 
-function Jobs({jobs,saved,setSaved,applications,setApplications,notify}){return <><PageHeader eyebrow="Jobs & internships" title="Find your next opportunity" description="Explore opportunities that match your skills and career interests."/><div className="jobs-filter"><input placeholder="Search jobs, skills, companies..."/><select><option>All locations</option><option>Lilongwe</option><option>Blantyre</option><option>Mzuzu</option></select><select><option>All types</option><option>Full-time</option><option>Internship</option></select></div><div className="job-layout"><div className="job-results">{jobs.map(j=><div className="job-card panel" key={j.id}><div className="company-icon">{j.company.slice(0,1)}</div><div className="job-main"><div className="job-title"><div><h3>{j.title}</h3><p>{j.company} · {j.location} · {j.type}</p></div><Badge tone="success">{j.match}% match</Badge></div><div className="tags">{j.skills.map(s=><span key={s}>{s}</span>)}</div><div className="job-actions"><Button onClick={()=>{if(!applications.includes(j.id)){setApplications([...applications,j.id]);notify('Application submitted')}}} disabled={applications.includes(j.id)}>{applications.includes(j.id)?'Applied ✓':'Apply now'}</Button><button className="save" onClick={()=>setSaved(saved.includes(j.id)?saved.filter(x=>x!==j.id):[...saved,j.id])}>{saved.includes(j.id)?'♥ Saved':'♡ Save job'}</button></div></div></div>)} </div><aside className="panel match-tip"><h3>AI match insights</h3><p>Your strongest job matches are based on verified skills, assessment results, education, projects and preferences.</p><ul><li>✓ JavaScript</li><li>✓ SQL</li><li>✓ React</li><li>! REST APIs</li></ul></aside></div></>}
+function Jobs({notify}){
+  const [items,setItems]=useState([]); const [loading,setLoading]=useState(true); const [error,setError]=useState(null); const [search,setSearch]=useState(''); const [employmentType,setEmploymentType]=useState('');
+  const loadJobs=async()=>{ setLoading(true); const { data, error: queryError }=await fetchPublishedJobs({search,employmentType}); if(queryError) setError(readableSupabaseError(queryError,'Unable to load jobs.')); else setItems(data||[]); setLoading(false); };
+  useEffect(()=>{ const timer=setTimeout(loadJobs,250); return()=>clearTimeout(timer); },[search,employmentType]);
+  const saveJob=async(id)=>{ const { data:{user} }=await supabase.auth.getUser(); if(!user){ notify('Please log in to save a job'); window.location.hash='login'; return; } const { error: saveError }=await supabase.from('saved_jobs').upsert({user_id:user.id,job_id:id}); notify(saveError?readableSupabaseError(saveError,'Unable to save this job.'):'Job saved'); };
+  return <><PageHeader eyebrow="Jobs & internships" title="Find your next opportunity" description="Explore opportunities that match your skills and career interests."/><div className="jobs-filter"><input placeholder="Search jobs, skills, companies..." value={search} onChange={e=>setSearch(e.target.value)}/><select value={employmentType} onChange={e=>setEmploymentType(e.target.value)}><option value="">All types</option><option value="full_time">Full-time</option><option value="part_time">Part-time</option><option value="internship">Internship</option><option value="contract">Contract</option><option value="remote">Remote</option></select></div><div className="job-layout"><div className="job-results">{loading?<div className="panel">Loading jobs…</div>:error?<div className="panel error">{error}</div>:items.length?items.map(j=><div className="job-card panel" key={j.id}><div className="company-icon">{j.employer_profiles?.company_name?.slice(0,1)||'J'}</div><div className="job-main"><div className="job-title"><div><h3>{j.title}</h3><p>{j.employer_profiles?.company_name||'Employer'} · {j.location_text||'Malawi'} · {j.employment_type}</p></div></div><div className="tags">{j.job_skills?.map(({skills:s})=><span key={s.id}>{s.name}</span>)}</div><div className="job-actions"><Button onClick={()=>window.location.hash='job-'+j.id}>View job</Button><button className="save" onClick={()=>saveJob(j.id)}>♡ Save job</button></div></div></div>):<div className="panel empty">No jobs found</div>}</div><aside className="panel match-tip"><h3>AI match insights</h3><p>Matching results will appear here when the recommendation service stores them in Supabase.</p></aside></div></>}
 
 function JobRows({jobs,compact=false}){return <div className="job-rows">{jobs.map(j=><div className="job-row" key={j.id}><div className="company-icon sm">{j.company[0]}</div><div><b>{j.title}</b><span>{j.company} · {j.location} · {j.type}</span></div><Badge tone="success">{j.match}%</Badge><Button variant="outline">{compact?'Apply':'View'}</Button></div>)} </div>}
 

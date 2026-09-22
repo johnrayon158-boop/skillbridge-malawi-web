@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import PageHeader from '../components/PageHeader';
+import { supabase } from '../lib/supabaseClient';
+import { readableSupabaseError } from '../lib/supabaseData';
 
 export default function CareerDetail({ id }){
   const [career,setCareer]=useState(null);
   const [loading,setLoading]=useState(true);
   const [error,setError]=useState(null);
-  useEffect(()=>{ if(!id) return; setLoading(true); fetch('/api/careers/'+id).then(r=>r.json()).then(d=>{ if(d.error) setError(d.error); else setCareer(d); setLoading(false); }).catch(e=>{ setError(e.message); setLoading(false);} ) },[id]);
+  useEffect(()=>{ if(!id) return; (async()=>{ setLoading(true); const {data,error:queryError}=await supabase.from('careers').select('id,title,description,career_skills(id,required_level,importance,skills(id,name)),career_categories(name)').eq('id',id).maybeSingle(); if(queryError) setError(readableSupabaseError(queryError,'Unable to load career.')); else if(data) setCareer({career:data,skills:(data.career_skills||[]).map(item=>({id:item.id,skill_name:item.skills?.name,required_level:item.required_level})),related:[]}); setLoading(false); })(); },[id]);
   if(!id) return <div className="panel">Select a career</div>;
   if(loading) return <div className="panel">Loading…</div>;
   if(error) return <div className="panel"><p className="error">{error}</p></div>;

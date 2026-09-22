@@ -18,7 +18,13 @@ export default function MyProfile(){
   const fetchProfile = async ()=>{
     if(!authProfile) return;
     setLoading(false); setError(null);
-    setProfile({ profile: authProfile, user, education: [], skills: [], experiences: [], certificates: [] });
+    const [{ data: education }, { data: skills }, { data: experiences }, { data: portfolio }] = await Promise.all([
+      supabase.from('education_history').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
+      supabase.from('user_skills').select('id,skill_id,proficiency_level,proficiency_score,years_experience,evidence,skills(name)').eq('user_id', user.id).order('created_at', { ascending: false }),
+      supabase.from('work_experience').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
+      supabase.from('portfolios').select('id,portfolio_certificates(*)').eq('user_id', user.id).maybeSingle()
+    ]);
+    setProfile({ profile: authProfile, user, education: education || [], skills: skills || [], experiences: experiences || [], certificates: portfolio?.portfolio_certificates || [] });
     setPersonal({ full_name: authProfile.full_name||'', bio: authProfile.bio||'', location: authProfile.location||'', phone: authProfile.phone||'', photo_url: authProfile.profile_photo_url||'' });
   };
 
@@ -36,23 +42,23 @@ export default function MyProfile(){
   };
 
   const addEducation = async (e)=>{
-    e.preventDefault(); const form = e.target; const fd = { institution: form.institution.value, program: form.program.value, degree: form.degree.value, start_date: form.start_date.value || null, end_date: form.end_date.value || null, notes: form.notes.value || null };
-    try{ setError(null); const res = await fetch('/api/profile/education', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(fd) }); const data = await res.json(); if(!res.ok) throw new Error(data.error||'Add failed'); fetchProfile(); form.reset(); }catch(err){ setError(err.message); }
+    e.preventDefault(); const form = e.target; const fd = { user_id:user.id, institution_name: form.institution.value, programme_name:form.program.value, start_date: form.start_date.value || null, end_date: form.end_date.value || null };
+    try{ setError(null); const { error:insertError }=await supabase.from('education_history').insert(fd); if(insertError) throw insertError; await fetchProfile(); form.reset(); }catch(err){ setError('Unable to add education record.'); }
   };
 
-  const removeEducation = async (id)=>{ if(!confirm('Delete education record?')) return; try{ await fetch('/api/profile/education/'+id, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` } }); fetchProfile(); }catch(err){ setError(err.message); } };
+  const removeEducation = async (id)=>{ if(!confirm('Delete education record?')) return; const { error:deleteError }=await supabase.from('education_history').delete().eq('id',id).eq('user_id',user.id); if(deleteError) setError('Unable to remove education record.'); else fetchProfile(); };
 
-  const addSkill = async (e)=>{ e.preventDefault(); const form=e.target; const fd = { skillName: form.skill.value, categoryName: form.category.value, proficiency: parseInt(form.proficiency.value||0,10) || null, years_experience: parseInt(form.years.value||0,10)||null, evidence_url: form.evidence.value||null }; if(!fd.skillName){ setError('Skill name required'); return; } try{ setError(null); const res = await fetch('/api/profile/skills', { method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(fd) }); const data=await res.json(); if(!res.ok) throw new Error(data.error||'Add failed'); fetchProfile(); form.reset(); }catch(err){ setError(err.message); } };
+  const addSkill = async (e)=>{ e.preventDefault(); const form=e.target; const skillName=form.skill.value.trim(); if(!skillName){ setError('Skill name required'); return; } try{ setError(null); let { data:skill }=await supabase.from('skills').select('id').eq('name',skillName).maybeSingle(); if(!skill){ setError('Choose a skill from the seeded skill catalogue.'); return; } const { error:insertError }=await supabase.from('user_skills').upsert({user_id:user.id,skill_id:skill.id,proficiency_level:form.proficiency.value||null,years_experience:parseInt(form.years.value||0,10)||null,evidence:form.evidence.value||null},{onConflict:'user_id,skill_id'}); if(insertError) throw insertError; fetchProfile(); form.reset(); }catch(err){ setError('Unable to save skill.'); } };
 
-  const removeSkill = async (id)=>{ if(!confirm('Remove skill?')) return; try{ await fetch('/api/profile/skills/'+id, { method:'DELETE', headers:{ Authorization:`Bearer ${token}` } }); fetchProfile(); }catch(err){ setError(err.message); } };
+  const removeSkill = async (id)=>{ if(!confirm('Remove skill?')) return; const { error:deleteError }=await supabase.from('user_skills').delete().eq('id',id).eq('user_id',user.id); if(deleteError) setError('Unable to remove skill.'); else fetchProfile(); };
 
-  const addExperience = async (e)=>{ e.preventDefault(); const form=e.target; const fd={ title: form.title.value, organization: form.organization.value, description: form.description.value, start_date: form.start_date.value||null, end_date: form.end_date.value||null }; if(!fd.title){ setError('Title required'); return; } try{ setError(null); const res=await fetch('/api/profile/experiences',{ method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(fd) }); const data=await res.json(); if(!res.ok) throw new Error(data.error||'Add failed'); fetchProfile(); form.reset(); }catch(err){ setError(err.message); } };
+  const addExperience = async (e)=>{ e.preventDefault(); const form=e.target; const fd={ user_id:user.id,title: form.title.value, organization: form.organization.value, description: form.description.value, start_date: form.start_date.value||null, end_date: form.end_date.value||null }; if(!fd.title){ setError('Title required'); return; } try{ setError(null); const { error:insertError }=await supabase.from('work_experience').insert(fd); if(insertError) throw insertError; fetchProfile(); form.reset(); }catch(err){ setError('Unable to add experience.'); } };
 
-  const removeExperience = async (id)=>{ if(!confirm('Remove experience?')) return; try{ await fetch('/api/profile/experiences/'+id,{ method:'DELETE', headers:{ Authorization:`Bearer ${token}` } }); fetchProfile(); }catch(err){ setError(err.message); } };
+  const removeExperience = async (id)=>{ if(!confirm('Remove experience?')) return; const { error:deleteError }=await supabase.from('work_experience').delete().eq('id',id).eq('user_id',user.id); if(deleteError) setError('Unable to remove experience.'); else fetchProfile(); };
 
-  const addCertificate = async (e)=>{ e.preventDefault(); const form=e.target; const fd={ title: form.title.value, issuer: form.issuer.value, url: form.url.value || null, issued_date: form.issued_date.value || null }; if(!fd.title){ setError('Title required'); return; } try{ setError(null); const res = await fetch('/api/profile/certificates',{ method:'POST', headers:{'Content-Type':'application/json', Authorization:`Bearer ${token}`}, body: JSON.stringify(fd) }); const data=await res.json(); if(!res.ok) throw new Error(data.error||'Add failed'); fetchProfile(); form.reset(); }catch(err){ setError(err.message); } };
+  const addCertificate = async (e)=>{ e.preventDefault(); const form=e.target; if(!form.title.value){ setError('Title required'); return; } try{ setError(null); let { data:portfolio }=await supabase.from('portfolios').select('id').eq('user_id',user.id).maybeSingle(); if(!portfolio){ const result=await supabase.from('portfolios').insert({user_id:user.id,title:`${authProfile.full_name || 'My'} Portfolio`}).select('id').single(); if(result.error) throw result.error; portfolio=result.data; } const { error:insertError }=await supabase.from('portfolio_certificates').insert({portfolio_id:portfolio.id,title:form.title.value,issuer:form.issuer.value,credential_url:form.url.value||null,issued_date:form.issued_date.value||null}); if(insertError) throw insertError; fetchProfile(); form.reset(); }catch(err){ setError('Unable to add certificate.'); } };
 
-  const removeCertificate = async (id)=>{ if(!confirm('Remove certificate?')) return; try{ await fetch('/api/profile/certificates/'+id,{ method:'DELETE', headers:{ Authorization:`Bearer ${token}` } }); fetchProfile(); }catch(err){ setError(err.message); } };
+  const removeCertificate = async (id)=>{ if(!confirm('Remove certificate?')) return; const { error:deleteError }=await supabase.from('portfolio_certificates').delete().eq('id',id); if(deleteError) setError('Unable to remove certificate.'); else fetchProfile(); };
 
   if(!token) return <div className="panel"><h3>Please log in to manage your profile</h3></div>;
   if(loading) return <div className="panel"><h3>Loading profile…</h3></div>;
