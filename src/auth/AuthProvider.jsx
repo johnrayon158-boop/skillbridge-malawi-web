@@ -35,7 +35,8 @@ export function AuthProvider({ children }){
   },[]);
 
   const login = async (email,password)=>{
-    const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if(error) return { ok:false, error: getAuthError(error) };
     const { data: profileData } = await supabase.from('profiles').select('*').eq('user_id', data.user.id).maybeSingle();
     if(!profileData) return { ok:false, error:'Your account profile is missing. Please contact support.' };
@@ -44,8 +45,10 @@ export function AuthProvider({ children }){
 
   const register = async ({fullName,email,password,accountType,acceptTerms,institution,programme,careerInterests,companyName,companyType})=>{
     if(!acceptTerms) return { ok:false, error:'Terms must be accepted' };
+    const normalizedEmail = email.trim().toLowerCase();
+    if(!isValidEmail(normalizedEmail)) return { ok:false, error:'Please enter a valid email address.' };
     const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
+      email: normalizedEmail,
       password,
       options: { data: {
         role: accountType,
@@ -55,7 +58,7 @@ export function AuthProvider({ children }){
         career_interests: careerInterests || [],
         company_name: companyName?.trim(),
         company_type: companyType?.trim()
-      } }
+      }, emailRedirectTo: `${window.location.origin}/#login` }
     });
     if(error) return { ok:false, error: getAuthError(error) };
     return { ok:true, user: data.user, needsEmailConfirmation: !data.session };
@@ -63,7 +66,9 @@ export function AuthProvider({ children }){
 
   const logout = async ()=>{ await supabase.auth.signOut(); };
   const resetPassword = async (email)=>{
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+    const normalizedEmail = email.trim().toLowerCase();
+    if(!isValidEmail(normalizedEmail)) return { ok:false, error:'Please enter a valid email address.' };
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedEmail, { redirectTo: window.location.origin });
     return error ? { ok:false, error:getAuthError(error) } : { ok:true };
   };
 
@@ -72,12 +77,19 @@ export function AuthProvider({ children }){
 
 function getAuthError(error){
   const message = error?.message?.toLowerCase() || '';
+  if(import.meta.env.DEV && error) console.error('Supabase Auth error:', error);
   if(message.includes('invalid login credentials')) return 'Email or password is incorrect.';
   if(message.includes('already registered') || message.includes('already been registered')) return 'An account with this email already exists.';
-  if(message.includes('password')) return 'Password must be at least 6 characters.';
-  if(message.includes('email')) return 'Please enter a valid email address.';
+  if(message.includes('email signups are disabled') || message.includes('signup is disabled')) return 'Email signups are disabled in Supabase. Enable Email provider in Authentication settings.';
+  if(message.includes('rate limit') || message.includes('too many requests')) return 'Too many attempts. Please wait a few minutes and try again.';
+  if(message.includes('email address') && (message.includes('invalid') || message.includes('malformed'))) return 'Please enter a valid email address.';
+  if(message.includes('password') && (message.includes('weak') || message.includes('short') || message.includes('least'))) return 'Password must be at least 6 characters.';
   if(message.includes('network') || message.includes('fetch')) return 'Unable to connect. Check your internet connection and try again.';
   return 'We could not complete that request. Please try again.';
+}
+
+function isValidEmail(email){
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
 export const useAuth = ()=> useContext(AuthContext);

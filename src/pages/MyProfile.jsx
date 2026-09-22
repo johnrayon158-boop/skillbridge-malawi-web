@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabaseClient';
 import Button from '../components/Button';
 import Badge from '../components/Badge';
 import PageHeader from '../components/PageHeader';
+import { readableSupabaseError } from '../lib/supabaseData';
+import '../profile.css';
 
 function SectionHead({title,action}){return <div className="section-head"><h3>{title}</h3>{action&&<div>{action}</div>}</div>}
 
@@ -16,16 +18,29 @@ export default function MyProfile(){
   const [personal,setPersonal]=useState({full_name:'',bio:'',location:'',phone:'',photo_url:''});
 
   const fetchProfile = async ()=>{
-    if(!authProfile) return;
-    setLoading(false); setError(null);
-    const [{ data: education }, { data: skills }, { data: experiences }, { data: portfolio }] = await Promise.all([
-      supabase.from('education_history').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
-      supabase.from('user_skills').select('id,skill_id,proficiency_level,proficiency_score,years_experience,evidence,skills(name)').eq('user_id', user.id).order('created_at', { ascending: false }),
-      supabase.from('work_experience').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
-      supabase.from('portfolios').select('id,portfolio_certificates(*)').eq('user_id', user.id).maybeSingle()
-    ]);
-    setProfile({ profile: authProfile, user, education: education || [], skills: skills || [], experiences: experiences || [], certificates: portfolio?.portfolio_certificates || [] });
-    setPersonal({ full_name: authProfile.full_name||'', bio: authProfile.bio||'', location: authProfile.location||'', phone: authProfile.phone||'', photo_url: authProfile.profile_photo_url||'' });
+    if(!token || !user) return;
+    setLoading(true); setError(null);
+    try{
+      if(!authProfile){
+        setError('Your profile record could not be loaded. Please refresh or contact support.');
+        return;
+      }
+      const results = await Promise.all([
+        supabase.from('education_history').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
+        supabase.from('user_skills').select('id,skill_id,proficiency_level,proficiency_score,years_experience,evidence,skills(name)').eq('user_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('work_experience').select('*').eq('user_id', user.id).order('start_date', { ascending: false }),
+        supabase.from('portfolios').select('id,portfolio_certificates(*)').eq('user_id', user.id).maybeSingle()
+      ]);
+      const failed = results.find(result=>result.error);
+      if(failed?.error) throw failed.error;
+      const [educationResult, skillsResult, experiencesResult, portfolioResult] = results;
+      setProfile({ profile: authProfile, user, education: educationResult.data || [], skills: skillsResult.data || [], experiences: experiencesResult.data || [], certificates: portfolioResult.data?.portfolio_certificates || [] });
+      setPersonal({ full_name: authProfile.full_name||'', bio: authProfile.bio||'', location: authProfile.location||'', phone: authProfile.phone||'', photo_url: authProfile.profile_photo_url||'' });
+    }catch(fetchError){
+      setError(readableSupabaseError(fetchError, 'Unable to load your profile. Check your Supabase permissions and try again.'));
+    }finally{
+      setLoading(false);
+    }
   };
 
   useEffect(()=>{ if(token) fetchProfile(); },[token, authProfile, user]);
@@ -61,16 +76,16 @@ export default function MyProfile(){
   const removeCertificate = async (id)=>{ if(!confirm('Remove certificate?')) return; const { error:deleteError }=await supabase.from('portfolio_certificates').delete().eq('id',id); if(deleteError) setError('Unable to remove certificate.'); else fetchProfile(); };
 
   if(!token) return <div className="panel"><h3>Please log in to manage your profile</h3></div>;
-  if(loading) return <div className="panel"><h3>Loading profile…</h3></div>;
+  if(loading || !profile) return <div className="panel"><h3>Loading profile…</h3></div>;
   if(error) return <div className="panel"><h3>Error</h3><p className="error">{error}</p></div>;
 
   const p = profile.profile || {};
-  const completion = p.completion_percent || 0;
+  const completion = p.profile_completion || 0;
 
   return <div>
     <PageHeader eyebrow="My profile" title="Your profile" description="Manage personal info, education, skills, experience and certificates."/>
     <div className="profile-overview panel">
-      <div className="overview-left"><div className="avatar xl">{(p.full_name||'').split(' ').map(n=>n[0]).slice(0,2).join('')}</div></div>
+      <div className="overview-left"><div className="avatar xl">{p.profile_photo_url?<img src={p.profile_photo_url} alt="Profile"/>:(p.full_name||profile.user?.email||'U').split(' ').map(n=>n[0]).slice(0,2).join('').toUpperCase()}</div></div>
       <div className="overview-main"><h2>{p.full_name||profile.user?.email}</h2><p>{p.bio}</p><div className="meta"><span>{p.location}</span><span>{p.phone}</span></div></div>
       <div className="overview-side"><Badge tone="success">{completion}% complete</Badge><Button variant="outline" onClick={()=>setEditing(!editing)}>{editing?'Cancel':'Edit profile'}</Button></div>
     </div>
@@ -83,7 +98,7 @@ export default function MyProfile(){
     </div>
 
     <div className="panel"><SectionHead title="Skills" action={<small>Add a skill</small>} />
-      <div className="skills-list">{(profile.skills.length?profile.skills.map(s=><div className="skill-row" key={s.id}><div><b>{s.skill_name}</b><small>{s.proficiency?`Level ${s.proficiency}`:'—'}</small><div>{s.years_experience?`${s.years_experience} yrs`:'—'}</div></div><div><button onClick={()=>removeSkill(s.id)}>Remove</button></div></div>):<div className="empty">No skills yet</div>)}</div>
+      <div className="skills-list">{(profile.skills.length?profile.skills.map(s=><div className="skill-row" key={s.id}><div><b>{s.skills?.name||'Skill'}</b><small>{s.proficiency_level?`Level ${s.proficiency_level}`:'—'}</small><div>{s.years_experience?`${s.years_experience} yrs`:'—'}</div></div><div><button onClick={()=>removeSkill(s.id)}>Remove</button></div></div>):<div className="empty">No skills yet</div>)}</div>
       <form className="form-grid" onSubmit={addSkill}><label>Skill<input name="skill" placeholder="e.g. JavaScript"/></label><label>Category<input name="category" placeholder="e.g. Programming"/></label><label>Proficiency<select name="proficiency"><option value="">Select</option><option value="1">1 - Beginner</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5 - Expert</option></select></label><label>Years experience<input name="years" type="number" min="0"/></label><label>Evidence URL<input name="evidence" placeholder="Link to sample or certificate"/></label><div className="form-actions"><Button type="submit">Add skill</Button></div></form>
     </div>
 

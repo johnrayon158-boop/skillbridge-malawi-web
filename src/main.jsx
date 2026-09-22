@@ -35,6 +35,7 @@ import RecommendedResources from './pages/RecommendedResources';
 import MyPortfolio from './pages/MyPortfolio';
 import ProjectEditor from './pages/ProjectEditor';
 import PublicPortfolio from './pages/PublicPortfolio';
+import CareerGuidancePage from './pages/CareerGuidance';
 import { fetchPublishedJobs, readableSupabaseError } from './lib/supabaseData';
 import { supabase } from './lib/supabaseClient';
 
@@ -72,7 +73,7 @@ function App(){
   const [applications,setApplications]=useState([]);
   const [saved,setSaved]=useState([]);
   const [assessment,setAssessment]=useState(null);
-  const [profile,setProfile]=useState({name:'Blessings Chirwa',programme:'BSc Computer Science',institution:'DMI-St John the Baptist University',completion:75});
+  const [profile,setProfile]=useState({name:'',programme:'',institution:'',completion:0});
   const [theme,setTheme]=useState('light');
 
   useEffect(()=>{
@@ -92,23 +93,23 @@ function App(){
 
   const notify=(m)=>{setToast(m);setTimeout(()=>setToast(''),2200)};
   const go=(p)=>setPage(p);
-  const {user} = useAuth();
+  const {user, profile:authProfile, logout} = useAuth();
   useEffect(()=>{ setLogged(!!user); },[user]);
 
-  const switchRole=(r)=>{ /* role switching handled by auth role */ notify(`Switch role is available via account management`)};
+  const switchRole=async()=>{ await logout(); setLogged(false); go('login'); notify('You have been logged out. Log in to continue.'); };
 
   const pageContent=<>
     {page==='home'&&<Home go={go}/>} 
     {page==='about'&&<About/>}
     {page==='how'&&<HowItWorks/>}
     {page==='login'&&<Login onLogin={(u)=>{ setLogged(true); const r = u?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('dashboard'); notify('Welcome back'); }} go={go}/>} 
-    {page==='signup'&&<Signup onSignup={(u,needsEmailConfirmation)=>{ if(needsEmailConfirmation){ setLogged(false); go('login'); notify('Account created. Check your email to confirm it before logging in.'); return; } setLogged(true); const r = u?.role || u?.user_metadata?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('profile'); notify('Account created — complete your profile'); }} go={go} />}
-    {page==='dashboard'&&<StudentDashboard profile={profile} go={go}/>} 
+    {page==='signup'&&<Signup onSignup={(u,needsEmailConfirmation)=>{ if(needsEmailConfirmation){ setLogged(false); go('login'); notify('Account created. Open the verification email, then return here to log in.'); return; } setLogged(true); const r = u?.role || u?.user_metadata?.role || user?.role; if(r==='employer') go('employer'); else if(r==='admin') go('admin'); else go('profile'); notify('Account created — complete your profile'); }} go={go} />}
+    {page==='dashboard'&&<StudentDashboard profile={{...profile,name:authProfile?.full_name||user?.email||profile.name,programme:authProfile?.programme||profile.programme,institution:authProfile?.institution||profile.institution,completion:authProfile?.profile_completion??profile.completion}} go={go}/>} 
     {page==='profile'&&<MyProfile/>}
     {page==='applications'&&<MyApplications/>}
     {page.startsWith('application-')&&<ApplicantDetail id={page.replace('application-','')}/>} 
-    {page==='careers'&&<Careers/>} 
-    {page==='careers_dir'&&<Careers/>}
+    {page==='careers'&&<Careers/>}
+    {page==='careers_dir'&&<CareerGuidancePage go={go}/>} 
     {page.startsWith('career-')&&<CareerDetail id={page.replace('career-','')}/>} 
     {page==='skills'&&<Skills/>}
     {page.startsWith('skill-')&&<SkillDetail id={page.replace('skill-','')}/>} 
@@ -123,7 +124,7 @@ function App(){
     {page.startsWith('take-')&&<TakeAssessment id={page.replace('take-','')}/>} 
     {page==='assessment-manager'&&<AssessmentManager/>}
     {page==='skill-gap'&&<SkillGap/>}
-    {page==='career-guidance'&&<CareerGuidance/>}
+    {page==='career-guidance'&&<CareerGuidancePage go={go}/>} 
     {page==='assessment'&&<Assessments/>} 
     {page==='my-portfolio'&&<MyPortfolio/>}
     {page==='project-new'&&<ProjectEditor/>}
@@ -132,25 +133,26 @@ function App(){
     {page==='gap'&&<SkillGap/>} 
     {page==='learning'&&<LearningResources/>} 
     {page==='portfolio'&&<MyPortfolio/>} 
-    {page==='jobs'&&<Jobs jobs={jobs} saved={saved} setSaved={setSaved} applications={applications} setApplications={setApplications} notify={notify}/>} 
+    {page==='jobs'&&<Jobs notify={notify}/>} 
     {page==='notifications'&&<Notifications/>}
-    {page==='settings'&&<Settings theme={theme} setTheme={setTheme} notify={notify}/>} 
+    {page==='settings'&&<Settings theme={theme} setTheme={setTheme} notify={notify} role={roleName}/>} 
     {page==='employer'&&<EmployerDashboard go={go}/>} 
     {page==='company'&&<CompanyProfile notify={notify}/>} 
-    {page==='candidates'&&<Candidates/>} 
+    {page==='candidates'&&<Candidates go={go}/>} 
     {page==='employer-apps'&&<EmployerApplications notify={notify}/>} 
     {page==='admin'&&<AdminDashboard notify={notify}/>} 
       {page==='learning-resources'&&<LearningResources/>}
       {page==='recommended-resources'&&<RecommendedResources/>}
   </>;
 
-  const isPublic=['home','login','signup','about','how','careers_dir','jobs'].includes(page) || (page.startsWith('job-') && !page.startsWith('job-recs-')) || page.startsWith('portfolio-');
+  const isPublic=['home','login','signup','about','how'].includes(page) || (page.startsWith('job-') && !page.startsWith('job-recs-')) || page.startsWith('portfolio-');
   const roleName = user?.role || null;
 
   const employerOnly = ['employer','company','post-job','manage-jobs','candidates','employer-apps','employer_profile'];
   const studentOnly = ['dashboard','profile','myprofile','applications','careers','skills','assessments','assessment','skill-gap','gap','learning','learning-resources','recommended-resources','portfolio','my-portfolio','notifications','settings','careers_dir'];
   const isEmployerPage = employerOnly.includes(page) || page.startsWith('post-job-') || page.startsWith('job-recs-') || page.startsWith('candidate-');
-  const allowedRolesForPage = isPublic ? null : (page==='admin' ? ['admin'] : (isEmployerPage ? ['employer'] : (studentOnly.includes(page) ? ['student','graduate'] : ['student','graduate','employer'])));
+  const adminCataloguePages=['careers_dir','skills','assessments','learning-resources','jobs'];
+  const allowedRolesForPage = isPublic ? null : (page==='admin' ? ['admin'] : (page==='settings' ? ['student','graduate','employer','admin'] : (isEmployerPage ? ['employer'] : (adminCataloguePages.includes(page) ? ['student','graduate','admin'] : (studentOnly.includes(page) ? ['student','graduate'] : ['student','graduate','employer'])))));
 
   const guardedContent = isPublic ? pageContent : <Protected allowedRoles={allowedRolesForPage}>{pageContent}</Protected>;
 
@@ -161,7 +163,7 @@ function App(){
   </div>
 }
 
-function Home({go}){return <div className="landing"><section className="hero"><div className="hero-copy"><Badge tone="soft">AI-powered career platform for Malawi</Badge><h1>Bridge Your Skills<br/>to a <span>Brighter Future.</span></h1><p>Get personalized career guidance, assess your skills, fill knowledge gaps and connect with real employment opportunities in Malawi.</p><div className="hero-actions"><Button onClick={()=>go('signup')}>Get Started →</Button><Button variant="outline" onClick={()=>go('how')}>Learn More</Button></div><div className="hero-stats"><div><b>25K+</b><span>Career-ready users</span></div><div><b>300+</b><span>Verified resources</span></div><div><b>120+</b><span>Partner roles</span></div></div></div><div className="hero-visual"><div className="glow"></div><div className="student-illustration"><div className="person-head"></div><div className="person-body"></div><div className="laptop"></div></div><div className="floating-card"><b>AI career match</b><strong>91%</strong><span>Software Developer</span></div></div></section><section className="feature-grid">{[['⌁','Career Guidance','Discover careers that match your interests and skills.'],['✓','Skills Assessment','Test and verify your competencies.'],['▤','Learning Resources','Get recommendations to close your skills gaps.'],['♢','Job Matching','Find the right job or internship.']].map(x=><div className="feature" key={x[1]}><div className="feature-icon">{x[0]}</div><h3>{x[1]}</h3><p>{x[2]}</p></div>)}</section><section className="section"><div className="section-head"><div><span className="eyebrow">Explore your path</span><h2>Popular Careers</h2></div><button onClick={()=>go('careers')}>View all careers →</button></div><div className="career-row">{careers.slice(0,4).map(c=><CareerMini c={c} key={c.title}/>)}</div></section></div>}
+function Home({go}){return <div className="landing"><section className="hero"><div className="hero-copy"><Badge tone="soft">AI-powered career platform for Malawi</Badge><h1>Bridge Your Skills<br/>to a <span>Brighter Future.</span></h1><p>Get personalized career guidance, assess your skills, fill knowledge gaps and connect with real employment opportunities in Malawi.</p><div className="hero-actions"><Button onClick={()=>go('signup')}>Get Started →</Button><Button variant="outline" onClick={()=>go('how')}>Learn More</Button></div><div className="hero-stats"><div><b>25K+</b><span>Career-ready users</span></div><div><b>300+</b><span>Verified resources</span></div><div><b>120+</b><span>Partner roles</span></div></div></div><div className="hero-visual"><div className="glow"></div><div className="student-illustration"><div className="person-head"></div><div className="person-body"></div><div className="laptop"></div></div><div className="floating-card"><b>AI career match</b><strong>91%</strong><span>Software Developer</span></div></div></section><section className="feature-grid">{[['⌁','Career Guidance','Discover careers that match your interests and skills.'],['✓','Skills Assessment','Test and verify your competencies.'],['▤','Learning Resources','Get recommendations to close your skills gaps.'],['♢','Job Matching','Find the right job or internship.']].map(x=><div className="feature" key={x[1]}><div className="feature-icon">{x[0]}</div><h3>{x[1]}</h3><p>{x[2]}</p></div>)}</section></div>}
 function CareerMini({c}){return <div className="career-mini"><div className={'mini-icon '+c.color}>{c.icon}</div><div><b>{c.title}</b><span>{c.category}</span></div></div>}
 function About(){return <div className="public-page"><Badge tone="soft">About SkillBridge Malawi</Badge><h1>Bridging Skills, Careers and Employment.</h1><p>SkillBridge Malawi connects students and graduates to career guidance, skills assessment, learning resources, professional portfolios and employment opportunities through one platform.</p><div className="about-cards"><div><b>Discover</b><span>Personalized career recommendations.</span></div><div><b>Assess</b><span>Evidence-based skills assessment.</span></div><div><b>Improve</b><span>Learning recommendations for skill gaps.</span></div><div><b>Match</b><span>Explainable job and candidate matching.</span></div></div></div>}
 function HowItWorks(){return <div className="public-page"><Badge tone="soft">How it works</Badge><h1>From learning to opportunity.</h1><div className="steps">{[['01','Discover','Complete your profile and receive career recommendations.'],['02','Assess','Take skill assessments and understand your current competency.'],['03','Improve','See your skill gaps and receive relevant learning resources.'],['04','Showcase','Build a portfolio with projects, certificates and evidence.'],['05','Match','Find jobs and internships matched to your profile.']].map(s=><div className="step" key={s[0]}><b>{s[0]}</b><h3>{s[1]}</h3><p>{s[2]}</p></div>)}</div></div>}
@@ -283,7 +285,7 @@ function Applications({applications}){const applied=jobs.filter(j=>applications.
 
 function Notifications(){return <><PageHeader eyebrow="Notifications" title="Stay up to date"/><div className="notification-list">{['Your JavaScript assessment result is ready.','A new job matches 88% of your profile.','Complete your portfolio by adding one more project.','Your profile was viewed by Tech Solutions Ltd.'].map((n,i)=><div className="notification panel" key={n}><div className="notice-dot">●</div><div><b>{n}</b><p>{i+1} hour{i?'s':''} ago</p></div></div>)} </div></>}
 
-function Settings({theme,setTheme,notify}){return <><PageHeader eyebrow="Settings" title="Account settings"/><div className="settings-grid"><div className="panel"><h3>Appearance</h3><p>Choose how SkillBridge looks for you.</p><div className="setting-row"><span>Dark mode</span><button className={'toggle '+(theme==='dark'?'on':'')} onClick={()=>setTheme(theme==='light'?'dark':'light')}><i></i></button></div></div><div className="panel"><h3>Notifications</h3><div className="setting-row"><span>Job recommendations</span><input type="checkbox" defaultChecked/></div><div className="setting-row"><span>Application updates</span><input type="checkbox" defaultChecked/></div><div className="setting-row"><span>Learning reminders</span><input type="checkbox"/></div></div><div className="panel"><h3>Privacy</h3><p>Your AI recommendations use your profile and assessment information to provide decision-support. They do not guarantee career or employment outcomes.</p><Button variant="outline" onClick={()=>notify('Privacy settings saved')}>Save settings</Button></div></div></>}
+function Settings({theme,setTheme,notify,role}){const employer=role==='employer'; return <><PageHeader eyebrow="Settings" title="Account settings" description={employer?'Manage employer preferences, notifications and account security.':'Choose how SkillBridge works for you.'}/><div className="settings-grid"><div className="panel"><h3>Appearance</h3><p>Choose how SkillBridge looks for you.</p><div className="setting-row"><span>Dark mode</span><button className={'toggle '+(theme==='dark'?'on':'')} onClick={()=>setTheme(theme==='light'?'dark':'light')}><i></i></button></div></div><div className="panel"><h3>Notifications</h3><div className="setting-row"><span>{employer?'New applications':'Job recommendations'}</span><input type="checkbox" defaultChecked/></div><div className="setting-row"><span>{employer?'Candidate matches':'Application updates'}</span><input type="checkbox" defaultChecked/></div><div className="setting-row"><span>{employer?'Employer messages':'Learning reminders'}</span><input type="checkbox"/></div></div><div className="panel"><h3>{employer?'Employer account':'Privacy'}</h3><p>{employer?'Control how your company receives candidate and application updates. Company profile details can be changed from Company Profile.':'Your AI recommendations use your profile and assessment information to provide decision-support. They do not guarantee career or employment outcomes.'}</p><div className="form-actions"><Button variant="outline" onClick={()=>notify('Settings saved')}>Save settings</Button>{employer&&<Button onClick={()=>window.location.hash='employer_profile'}>Company profile</Button>}</div></div><div className="panel"><h3>Security</h3><p>Manage your account access and password through Supabase Auth.</p><Button variant="outline" onClick={()=>window.location.hash='login'}>Sign out</Button></div></div></>}
 
 function EmployerDashboard({go}){return <><PageHeader eyebrow="Employer dashboard" title="Review applicants, post roles and match talent faster." description="Manage company profiles, publish jobs and internships, and review candidates using skills, portfolio evidence and academic background." action={<Button onClick={()=>go('post-job')}>Post a job →</Button>}/><div className="stats"><Stat icon="▤" label="Active Jobs" value="6"/><Stat icon="□" label="Applications" value="84"/><Stat icon="♢" label="Recommended Candidates" value="27"/><Stat icon="✓" label="Shortlisted" value="12"/></div><div className="dashboard-grid"><div className="panel"><PanelHead title="Example AI candidate match"/><div className="candidate-match"><div className="big-score">85<span>%</span></div><div><h3>Career fit</h3><p>Strong matches: relevant coursework, verified skills, academic qualification and portfolio evidence.</p><div className="tags"><span>JavaScript</span><span>React</span><span>SQL</span></div></div></div></div><div className="panel quick"><PanelHead title="Quick Actions"/><Button variant="soft" onClick={()=>go('post-job')}>＋ Post a Job</Button><Button variant="soft" onClick={()=>go('candidates')}>♢ Find Candidates</Button><Button variant="soft" onClick={()=>go('employer-apps')}>□ Review Applications</Button></div></div><div className="panel"><PanelHead title="Recent applications"/><EmployerRows go={go}/></div></>}
 

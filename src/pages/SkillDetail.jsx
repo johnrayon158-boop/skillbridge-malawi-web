@@ -11,5 +11,6 @@ export default function SkillDetail({ id }){
   if(!id) return <div className="panel">Select a skill</div>;
   if(loading) return <div className="panel">Loading…</div>;
   if(error) return <div className="panel"><p className="error">{error}</p></div>;
+  if(!skill) return <div className="panel"><p className="empty">Skill not found.</p></div>;
   return <div><PageHeader eyebrow="Skill" title={skill.name} description={skill.category_name||''} /><div className="panel"><h3>Description</h3><p>{skill.description||'No description provided.'}</p></div></div>;
 }

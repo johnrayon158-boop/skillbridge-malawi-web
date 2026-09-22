@@ -1,0 +1,2 @@
+.back-button{flex:0 0 auto;background:transparent;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700;white-space:nowrap}.back-button:hover{color:var(--text);background:var(--soft)}
+@media (max-width:720px){.back-button{padding:8px 10px;font-size:11px}.topbar .search{width:40%}}

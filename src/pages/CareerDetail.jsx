@@ -11,6 +11,7 @@ export default function CareerDetail({ id }){
   if(!id) return <div className="panel">Select a career</div>;
   if(loading) return <div className="panel">Loading…</div>;
   if(error) return <div className="panel"><p className="error">{error}</p></div>;
+  if(!career) return <div className="panel"><p className="empty">Career not found.</p></div>;
   return <div>
     <PageHeader eyebrow="Career" title={career.career.title} description={career.career.description||''} />
     <div className="panel"><h3>Required skills</h3>{career.skills.length?career.skills.map(s=><div key={s.id} className="skill-req"><b>{s.skill_name}</b><small>Level {s.required_level||'—'}</small></div>):<div className="empty">No required skills defined</div>}</div>

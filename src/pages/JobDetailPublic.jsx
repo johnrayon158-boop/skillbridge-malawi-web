@@ -12,6 +12,7 @@ export default function JobDetailPublic({ id }){
   if(!id) return <div className="panel">Select a job</div>;
   if(loading) return <div className="panel">Loading…</div>;
   if(error) return <div className="panel"><div className="error">{error}</div></div>;
+  if(!job) return <div className="panel"><div className="empty">Job not found.</div></div>;
   const submitApplication = async ()=>{
     try{ setApplying(true); const { data:{user} }=await supabase.auth.getUser(); if(!user){ window.location.hash='login'; return; } const { error: insertError }=await supabase.from('applications').insert({ applicant_id:user.id, job_id:id, cover_letter:cover||null }); if(insertError) throw insertError; window.location.hash='applications'; }catch(e){ alert(readableSupabaseError(e,'Unable to submit your application.')); } finally{ setApplying(false); } };
 

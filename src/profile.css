@@ -1,0 +1,3 @@
+.overview-left .avatar img{width:100%;height:100%;display:block;object-fit:cover;border-radius:inherit}
+.profile-overview .meta{display:flex;gap:18px;flex-wrap:wrap}
+.profile-overview .meta span:empty{display:none}
